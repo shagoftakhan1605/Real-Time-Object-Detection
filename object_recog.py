@@ -1,111 +1,141 @@
-import tkinter as tk
-from PIL import Image, ImageTk
 import cv2
 import numpy as np
+import os
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
-# Load YOLOv3 configuration and weights
+# Load YOLOv3 network
 net = cv2.dnn.readNet("yolov3.weights", "yolov3.cfg")
-
-# Load the COCO dataset labels
-with open("coco.names", "r") as f:
-    classes = [line.strip() for line in f.readlines()]
-
-# Get the layer names of the YOLO network
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
 
-# Set up the main application window
-root = tk.Tk()
-root.title("YOLOv3 Real-Time Object Detection")
-root.geometry("800x600")
+# Load class names
+with open("coco.names", "r") as f:
+    classes = [line.strip() for line in f.readlines()]
 
-# Initialize video capture (webcam)
-cap = cv2.VideoCapture(0)
+# Set parameters
+input_size = 416
+confidence_threshold = 0.5
+nms_threshold = 0.4
+pseudo_label_threshold = 0.7  # Confidence threshold for generating pseudo-labels
 
-# Function to perform object detection on a frame
-def detect_objects(frame):
-    height, width, _ = frame.shape
+pseudo_label_dir = "pseudo_labels"
+os.makedirs(pseudo_label_dir, exist_ok=True)
 
-    # Prepare the frame for YOLO
-    blob = cv2.dnn.blobFromImage(frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+def draw_bounding_boxes(img, boxes, confidences, class_ids):
+    for i in range(len(boxes)):
+        x, y, w, h = boxes[i]
+        label = str(classes[class_ids[i]])
+        confidence = confidences[i]
+        color = (0, 255, 0)
+        cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+        cv2.putText(img, f"{label}: {confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+def generate_pseudo_label(image, boxes, confidences, class_ids, save_dir, filename):
+    with open(os.path.join(save_dir, filename.replace('.jpg', '.txt')), 'w') as f:
+        for i in range(len(boxes)):
+            if confidences[i] >= pseudo_label_threshold:
+                x, y, w, h = boxes[i]
+                label = f"{class_ids[i]} {(x + w / 2) / input_size} {(y + h / 2) / input_size} {w / input_size} {h / input_size}\n"
+                f.write(label)
+        cv2.imwrite(os.path.join(save_dir, filename), image)
+
+def process_frame(frame):
+    height, width, channels = frame.shape
+    blob = cv2.dnn.blobFromImage(frame, 1/255.0, (input_size, input_size), (0, 0, 0), True, crop=False)
     net.setInput(blob)
-    outs = net.forward(output_layers)
+    outputs = net.forward(output_layers)
 
-    boxes = []
-    confidences = []
-    class_ids = []
-    for out in outs:
-        for detection in out:
+    boxes, confidences, class_ids = [], [], []
+    for output in outputs:
+        for detection in output:
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            
-            # Apply a confidence threshold to filter out weak detections
-            if confidence > 0.5:
-                center_x = int(detection[0] * width)
-                center_y = int(detection[1] * height)
-                w = int(detection[2] * width)
-                h = int(detection[3] * height)
-                x = int(center_x - w / 2)
-                y = int(center_y - h / 2)
+            if confidence > confidence_threshold:
+                center_x, center_y = int(detection[0] * width), int(detection[1] * height)
+                w, h = int(detection[2] * width), int(detection[3] * height)
+                x, y = int(center_x - w / 2), int(center_y - h / 2)
                 boxes.append([x, y, w, h])
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
 
-    # Apply non-maxima suppression to remove redundant boxes
-    indices = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-    
-    # List to store detected object names
-    detected_objects = []
-    
+    indices = cv2.dnn.NMSBoxes(boxes, confidences, confidence_threshold, nms_threshold)
     if len(indices) > 0:
-        for i in indices.flatten():
-            x, y, w, h = boxes[i]
-            label = str(classes[class_ids[i]])
-            detected_objects.append(label)
-            
-            # Drawing bounding boxes and labeling detected objects
-            color = (0, 255, 0)  # Green color for bounding boxes
-            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        indices = indices.flatten()
 
-    return frame, detected_objects
+    final_boxes = [boxes[i] for i in indices]
+    final_confidences = [confidences[i] for i in indices]
+    final_class_ids = [class_ids[i] for i in indices]
 
-# Function to update the frame in the GUI
-def update_frame():
-    ret, frame = cap.read()
-    if ret:
-        frame, detected_objects = detect_objects(frame)
+    return final_boxes, final_confidences, final_class_ids
 
-        # Convert the frame to PhotoImage
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(frame_rgb)
-        img_tk = ImageTk.PhotoImage(img_pil)
+def run_real_time_detection():
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        messagebox.showerror("Error", "Webcam not found or could not be opened.")
+        return
+    frame_id = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        boxes, confidences, class_ids = process_frame(frame)
+        draw_bounding_boxes(frame, boxes, confidences, class_ids)
+        generate_pseudo_label(frame, boxes, confidences, class_ids, pseudo_label_dir, f"frame_{frame_id}.jpg")
+        cv2.imshow('YOLOv3 Real-Time Detection', frame)
+        frame_id += 1
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
 
-        # Update the image label
-        image_label.config(image=img_tk)
-        image_label.image = img_tk
+def run_video_detection(video_path):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        messagebox.showerror("Error", "Video file could not be opened.")
+        return
+    frame_id = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        boxes, confidences, class_ids = process_frame(frame)
+        draw_bounding_boxes(frame, boxes, confidences, class_ids)
+        generate_pseudo_label(frame, boxes, confidences, class_ids, pseudo_label_dir, f"frame_{frame_id}.jpg")
+        cv2.imshow('YOLOv3 Video Detection', frame)
+        frame_id += 1
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
 
-        # Update the text box with detected objects
-        objects_text.delete(1.0, tk.END)
-        objects_text.insert(tk.END, "\n".join(detected_objects))
+def select_option():
+    root = tk.Tk()
+    root.title("YOLOv3 Detection Mode")
+    
+    def on_real_time():
+        root.destroy()
+        run_real_time_detection()
+    
+    def on_video_upload():
+        root.destroy()
+        video_path = filedialog.askopenfilename(title="Select Video File", filetypes=[("Video files", "*.mp4;*.avi;*.mov;*.mkv")])
+        if video_path:
+            run_video_detection(video_path)
+        else:
+            messagebox.showerror("Error", "No file selected!")
 
-    # Schedule the next frame update
-    root.after(10, update_frame)
+    label = tk.Label(root, text="Choose Detection Mode:", font=('Helvetica', 14))
+    label.pack(pady=20)
 
-# Image label for displaying the video
-image_label = tk.Label(root)
-image_label.pack(pady=20)
+    real_time_button = tk.Button(root, text="Real-Time Detection", command=on_real_time, font=('Helvetica', 12), width=20)
+    real_time_button.pack(pady=10)
 
-# Text box for detected objects
-objects_text = tk.Text(root, height=10, width=50)
-objects_text.pack(pady=20)
+    upload_button = tk.Button(root, text="Upload Video", command=on_video_upload, font=('Helvetica', 12), width=20)
+    upload_button.pack(pady=10)
 
-# Start the real-time video capture and detection
-update_frame()
+    root.mainloop()
 
-# Start the GUI event loop
-root.mainloop()
-
-# Release the video capture when done
-cap.release()
+if __name__ == "__main__":
+    select_option()
