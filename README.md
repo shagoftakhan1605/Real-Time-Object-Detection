@@ -162,3 +162,29 @@ While YOLOv3 is designed for real-time performance, processing speed can vary ba
 
 - **Advanced Data Augmentation**: Implementing techniques like mosaic augmentation or mixup to further address class imbalance.
 - **Cost-Sensitive Learning**: Exploring weighted loss functions to penalize errors on minority classes more heavily.
+- - **Enhanced Model Training**: Integrating the pseudo-labels generated through this project into a continuous training pipeline, allowing the model to learn from new data over time and improve its accuracy, particularly for underrepresented classes.
+- **Multi-Scale Detection**: Exploring the integration of multi-scale detection techniques to handle objects of varying sizes more effectively, especially in challenging scenarios with significant scale variation.
+
+## Contributing
+
+We welcome contributions to improve the functionality and performance of this project. If you would like to contribute, please follow these steps:
+
+1. **Fork the Repository**: Create a personal fork of this repository.
+2. **Create a Feature Branch**: Create a branch for your feature or bug fix.
+3. **Submit a Pull Request**: Once your feature or fix is ready, submit a pull request for review.
+
+Please ensure that your code adheres to the existing style and conventions used in the project. Contributions should also include appropriate tests to verify the functionality of new features or fixes.
+
+## Acknowledgments
+
+- **YOLOv3**: This project builds on the incredible work done by Joseph Redmon and Ali Farhadi in developing YOLOv3, which is available [here](https://pjreddie.com/darknet/yolo/).
+- **COCO Dataset**: The COCO dataset, used in this project, is an invaluable resource for object detection research. Learn more about COCO [here](https://cocodataset.org/).
+- **Tkinter**: Tkinter is a powerful and easy-to-use library for creating GUIs in Python. Documentation can be found [here](https://docs.python.org/3/library/tkinter.html).
+
+## References
+
+- Redmon, J., & Farhadi, A. (2018). YOLOv3: An Incremental Improvement. arXiv preprint arXiv:1804.02767. Available [here](https://arxiv.org/abs/1804.02767).
+- Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., ... & Zitnick, C. L. (2014). Microsoft COCO: Common Objects in Context. In *European Conference on Computer Vision* (pp. 740-755). Springer, Cham.
+- Zoph, B., Vasudevan, V., Shlens, J., & Le, Q. V. (2018). Learning Transferable Architectures for Scalable Image Recognition. In *Proceedings of the IEEE conference on computer vision and pattern recognition* (pp. 8697-8710).
+- Johnson, J. M., & Khoshgoftaar, T. M. (2019). Survey on Deep Learning with Class Imbalance. *Journal of Big Data, 6*(1), 1-54.
+
